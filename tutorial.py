@@ -20,15 +20,25 @@ wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
 print('running', wandb_run.name)
 
 
+# NUM_MEGAPOCHS = wandb_run.config.central_epochs
+# NUM_CLIENTS =   wandb_run.config.central_batch
+# CENTRAL_LR =    wandb_run.config.central_lr
+#
+# NUM_EPOCHS =    wandb_run.config.client_epochs
+# BATCH_SIZE =    wandb_run.config.client_batch
+# CLIENT_LR =     wandb_run.config.client_lr
+# PREFETCH_BUFFER = BATCH_SIZE
+
 NUM_CLIENTS = 50         # number of clients to sample on each round
 NUM_EPOCHS = 100         # number of times to train for each selected client subset
 NUM_MEGAPOCHS = 20000    # number of times to reselect clients
 BATCH_SIZE = 32
-SHUFFLE_BUFFER = 100
 PREFETCH_BUFFER = 10
 
 CLIENT_LR = 0.001
 CENTRAL_LR = 0.003
+
+SHUFFLE_BUFFER = 100
 
 IMG_WIDTH = 28
 IMG_HEIGHT = 28
@@ -45,12 +55,11 @@ test_data = experiments[EXPERIMENT](emnist_test)
 
 example_dataset = train_data.create_tf_dataset_for_client(train_data.client_ids[0])
 
-
 def preprocess(dataset):
     def batch_format_fn(element):
         """Flatten a batch `pixels` and return the features as an `OrderedDict`."""
         return collections.OrderedDict(
-            x=tf.reshape(element['pixels'], [-1, 784]),
+            x=tf.expand_dims(element['pixels'], -1),
             y=tf.reshape(element['label'], [-1, 1]))
 
     return dataset.repeat(NUM_EPOCHS).shuffle(SHUFFLE_BUFFER).batch(BATCH_SIZE
@@ -67,7 +76,10 @@ def make_federated_data(client_data, client_ids):
 
 def create_keras_model():
     return tf.keras.models.Sequential([
-        tf.keras.layers.InputLayer(input_shape=(784,)),
+        # tf.keras.layers.InputLayer(input_shape=(784,)),
+        tf.keras.layers.Conv2D(16, (7, 7), input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
+        # tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
+        tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(10, kernel_initializer='zeros'),
         tf.keras.layers.Softmax(),
     ])
