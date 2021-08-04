@@ -13,16 +13,22 @@ from datetime import datetime
 from time import time
 import gc
 
-NUM_MEGAPOCHS = 20000    # number of times to reselect clients
-NUM_CLIENTS = 50         # number of clients to sample on each round
-CENTRAL_LR = 0.006
+EXPERIMENT = 'default'
 
-NUM_EPOCHS = 100          # number of times to train for each selected client subset
-BATCH_SIZE = 32
-CLIENT_LR = 0.001
+experimets = {
+    lambda ds: ds,
+}
+
+# NUM_MEGAPOCHS = 20000    # number of times to reselect clients
+# NUM_CLIENTS = 50         # number of clients to sample on each round
+# CENTRAL_LR = 0.006
+#
+# NUM_EPOCHS = 100          # number of times to train for each selected client subset
+# BATCH_SIZE = 32
+# CLIENT_LR = 0.001
 
 SHUFFLE_BUFFER = 100
-PREFETCH_BUFFER = BATCH_SIZE
+# PREFETCH_BUFFER = BATCH_SIZE
 
 IMG_WIDTH = 84
 IMG_HEIGHT = 84
@@ -70,8 +76,12 @@ if __name__ == '__main__':
     fcm = tff.simulation.FileCheckpointManager('checkpoint/')
 
     celeba_train, celeba_test = tff.simulation.datasets.celeba.load_data()
-    dataset_spec = preprocess(celeba_train.create_tf_dataset_for_client(
-        celeba_train.client_ids[0])).element_spec
+
+    train_data = experiments[EXPERIMENT](celeba_train)
+    test_data = experiments[EXPERIMENT](celeba_train)
+
+    dataset_spec = preprocess(train_data.create_tf_dataset_for_client(
+        train_data.client_ids[0])).element_spec
 
     run = wandb.init(project="federated-celeba-vanilla", entity="exr0nprojects")
     print('running', run.name)
@@ -92,17 +102,17 @@ if __name__ == '__main__':
         use_experimental_simulation_loop=True)
 
     federated_eval = tff.learning.build_federated_evaluation(partial(model_factory, dataset_spec))  # https://stackoverflow.com/a/56811627/10372825
-    eval_dataset = make_federated_data(celeba_test, celeba_test.client_ids[:50])
+    eval_dataset = make_federated_data(test_data, test_data.client_ids[:50])
 
     state = iterative_process.initialize()
     seen_ids = set()
-    print(f"total clients: {len(celeba_train.client_ids)} train, {len(celeba_test.client_ids)} test")
+    print(f"total clients: {len(train_data.client_ids)} train, {len(test_data.client_ids)} test")
 
     # sampled_clients = np.random.choice(celeba_train.client_ids, NUM_CLIENTS)
-    sampled_clients = celeba_train.client_ids[:NUM_CLIENTS]
+    sampled_clients = train_data.client_ids[:NUM_CLIENTS]
     for client in sampled_clients:
         seen_ids.add(client)
-    dataset = make_federated_data(celeba_train, sampled_clients)
+    dataset = make_federated_data(train_data, sampled_clients)
 
 
     for round_num in range(0, NUM_MEGAPOCHS):
@@ -124,7 +134,7 @@ if __name__ == '__main__':
                 'test_loss': eval_metrics['eval']['loss'],
                 'train_acc': overfit_eval_metrics['eval']['sparse_categorical_accuracy'],
                 'train_loss': overfit_eval_metrics['eval']['loss'],
-                'client_coverage': len(seen_ids)/len(celeba_train.client_ids),
+                'client_coverage': len(seen_ids)/len(train_data.client_ids),
                 'time_taken': time() - start_time
             })
             if round_num % 30 == 29:

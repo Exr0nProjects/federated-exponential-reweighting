@@ -16,12 +16,11 @@ from time import time
 import gc
 
 np.random.seed(0)
+wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
+print('running', wandb_run.name)
 
-emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
 
-example_dataset = emnist_train.create_tf_dataset_for_client(
-    emnist_train.client_ids[0])
-NUM_CLIENTS = 50       # number of clients to sample on each round
+NUM_CLIENTS = 50         # number of clients to sample on each round
 NUM_EPOCHS = 100         # number of times to train for each selected client subset
 NUM_MEGAPOCHS = 20000    # number of times to reselect clients
 BATCH_SIZE = 32
@@ -31,8 +30,20 @@ PREFETCH_BUFFER = 10
 CLIENT_LR = 0.001
 CENTRAL_LR = 0.003
 
-IMG_WIDTH = 84
-IMG_HEIGHT = 84
+IMG_WIDTH = 28
+IMG_HEIGHT = 28
+
+EXPERIMENT = 'default'
+experiments = {
+    'default': lambda ds: ds,
+}
+
+emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
+
+train_data = experiments[EXPERIMENT](emnist_train)
+test_data = experiments[EXPERIMENT](emnist_test)
+
+example_dataset = train_data.create_tf_dataset_for_client(train_data.client_ids[0])
 
 
 def preprocess(dataset):
@@ -77,20 +88,20 @@ iterative_process = tff.learning.build_federated_averaging_process(
     server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0))
 
 federated_eval = tff.learning.build_federated_evaluation(model_fn)  # https://stackoverflow.com/a/56811627/10372825
-eval_dataset = make_federated_data(emnist_test, emnist_test.client_ids[:50])
+eval_dataset = make_federated_data(test_data, test_data.client_ids[:50])
 
 state = iterative_process.initialize()
 
 seen_ids = set()
-print(f"total clients: {len(emnist_train.client_ids)} train, {len(emnist_test.client_ids)} test")
+print(f"total clients: {len(train_data.client_ids)} train, {len(test_data.client_ids)} test")
 
 for round_num in trange(0, NUM_MEGAPOCHS):
     try:
         start_time = time()
-        sampled_clients = np.random.choice(emnist_train.client_ids, NUM_CLIENTS)
+        sampled_clients = np.random.choice(train_data.client_ids, NUM_CLIENTS)
         for client in sampled_clients:
             seen_ids.add(client)
-        dataset = make_federated_data(emnist_train, sampled_clients)
+        dataset = make_federated_data(train_data, sampled_clients)
         state, metrics = iterative_process.next(state, dataset)
         gc.collect()
         eval_metrics = federated_eval(state.model, eval_dataset)
@@ -98,9 +109,9 @@ for round_num in trange(0, NUM_MEGAPOCHS):
         wandb.log({
             **metrics['train'],
             'step': round_num * NUM_EPOCHS,
-            'test_accuracy': eval_metrics['eval']['sparse_categorical_accuracy'],
-            'test_loss': eval_metrics['eval']['loss'],
-            'client_coverage': len(seen_ids)/len(emnist_train.client_ids),
+            'test_accuracy': eval_metrics['sparse_categorical_accuracy'],
+            'test_loss': eval_metrics['loss'],
+            'client_coverage': len(seen_ids)/len(train_data.client_ids),
             'time_taken': time() - start_time
         })
         # if round_num % 30 == 29:

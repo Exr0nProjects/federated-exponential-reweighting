@@ -1,5 +1,5 @@
 program: main.py
-project: celeba-vanilla
+project: emnist-vanilla
 entity: federated-reweighting
 method: bayes
 
