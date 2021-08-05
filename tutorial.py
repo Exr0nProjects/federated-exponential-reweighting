@@ -1,12 +1,8 @@
-import nest_asyncio
-nest_asyncio.apply()
-
-import collections
-
 import numpy as np
 import tensorflow as tf
 import tensorflow_federated as tff
 import wandb
+from matplotlib import pyplot as plt
 from tqdm import trange
 
 import collections
@@ -14,6 +10,11 @@ from functools import partial
 from datetime import datetime
 from time import time
 import gc
+
+from experiments import experiments
+
+import nest_asyncio
+nest_asyncio.apply()
 
 np.random.seed(0)
 wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
@@ -44,9 +45,6 @@ IMG_WIDTH = 28
 IMG_HEIGHT = 28
 
 EXPERIMENT = 'default'
-experiments = {
-    'default': lambda ds: ds,
-}
 
 emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
 
@@ -77,9 +75,10 @@ def make_federated_data(client_data, client_ids):
 def create_keras_model():
     return tf.keras.models.Sequential([
         # tf.keras.layers.InputLayer(input_shape=(784,)),
-        tf.keras.layers.Conv2D(16, (7, 7), input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
+        tf.keras.layers.Conv2D(wandb_run.config.conv_kernels, (wandb_run.config.conv_size,)*2, input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
         # tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(wandb_run.config.dense_width, kernel_initializer='zeros'),
         tf.keras.layers.Dense(10, kernel_initializer='zeros'),
         tf.keras.layers.Softmax(),
     ])
@@ -93,6 +92,15 @@ def model_fn():
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
 
+## Example MNIST digits for one client
+figure = plt.figure(figsize=(20, 4))
+j = 0
+
+for example in example_dataset.take(40):
+    plt.subplot(4, 10, j+1)
+    plt.imshow(example['pixels'].numpy(), cmap='gray', aspect='equal')
+    plt.axis('off')
+    j += 1
 
 iterative_process = tff.learning.build_federated_averaging_process(
     model_fn,

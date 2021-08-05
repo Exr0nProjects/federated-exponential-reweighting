@@ -1,4 +1,4 @@
-program: main.py
+program: tutorial.py
 project: emnist-vanilla
 entity: federated-reweighting
 method: bayes
@@ -21,6 +21,16 @@ parameters:
   client_lr:
     min: 0.0005
     max: 0.01
+
+  conv_size:
+    min: 3
+    max: 13
+  conv_kernels:
+    min: 1
+    max: 64
+  dense_width:
+    min: 10
+    max: 1024
 
 metric:
   goal: minimize
