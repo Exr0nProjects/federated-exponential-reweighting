@@ -11,7 +11,7 @@ from datetime import datetime
 from time import time
 import gc
 
-from experiments import experiments
+from experiments import preprocess, make_federated_data
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -20,65 +20,49 @@ np.random.seed(0)
 wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
 print('running', wandb_run.name)
 
+EXPERIMENT = 'default'
+CLIENT_RATIO = 0.1  # ratio of clients affected by noise
 
-# NUM_MEGAPOCHS = wandb_run.config.central_epochs
-# NUM_CLIENTS =   wandb_run.config.central_batch
-# CENTRAL_LR =    wandb_run.config.central_lr
+NUM_MEGAPOCHS = wandb_run.config.central_epochs
+NUM_CLIENTS =   wandb_run.config.central_batch
+CENTRAL_LR =    wandb_run.config.central_lr
+
+NUM_EPOCHS =    wandb_run.config.client_epochs
+BATCH_SIZE =    wandb_run.config.client_batch
+CLIENT_LR =     wandb_run.config.client_lr
+PREFETCH_BUFFER = BATCH_SIZE
+
+# NUM_CLIENTS = 50         # number of clients to sample on each round
+# NUM_EPOCHS = 100         # number of times to train for each selected client subset
+# NUM_MEGAPOCHS = 20000    # number of times to reselect clients
+# BATCH_SIZE = 32
+# PREFETCH_BUFFER = 10
 #
-# NUM_EPOCHS =    wandb_run.config.client_epochs
-# BATCH_SIZE =    wandb_run.config.client_batch
-# CLIENT_LR =     wandb_run.config.client_lr
-# PREFETCH_BUFFER = BATCH_SIZE
-
-NUM_CLIENTS = 50         # number of clients to sample on each round
-NUM_EPOCHS = 100         # number of times to train for each selected client subset
-NUM_MEGAPOCHS = 20000    # number of times to reselect clients
-BATCH_SIZE = 32
-PREFETCH_BUFFER = 10
-
-CLIENT_LR = 0.001
-CENTRAL_LR = 0.003
+# CLIENT_LR = 0.001
+# CENTRAL_LR = 0.003
 
 SHUFFLE_BUFFER = 100
 
 IMG_WIDTH = 28
 IMG_HEIGHT = 28
 
-EXPERIMENT = 'default'
-
 emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
 
-train_data = experiments[EXPERIMENT](emnist_train)
-test_data = experiments[EXPERIMENT](emnist_test)
+train_data = emnist_train
+test_data = emnist_test
 
 example_dataset = train_data.create_tf_dataset_for_client(train_data.client_ids[0])
 
-def preprocess(dataset):
-    def batch_format_fn(element):
-        """Flatten a batch `pixels` and return the features as an `OrderedDict`."""
-        return collections.OrderedDict(
-            x=tf.expand_dims(element['pixels'], -1),
-            y=tf.reshape(element['label'], [-1, 1]))
 
-    return dataset.repeat(NUM_EPOCHS).shuffle(SHUFFLE_BUFFER).batch(BATCH_SIZE
-                    ).map(batch_format_fn).prefetch(PREFETCH_BUFFER)
-
-
-preprocessed_example_dataset = preprocess(example_dataset)
-
-def make_federated_data(client_data, client_ids):
-    return [
-        preprocess(client_data.create_tf_dataset_for_client(x))
-        for x in client_ids
-    ]
+preprocessed_example_dataset = preprocess(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER, example_dataset)
 
 def create_keras_model():
     return tf.keras.models.Sequential([
         # tf.keras.layers.InputLayer(input_shape=(784,)),
-        tf.keras.layers.Conv2D(wandb_run.config.conv_kernels, (wandb_run.config.conv_size,)*2, input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
+        tf.keras.layers.Conv2D(16, (7,)*2, input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
         # tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(wandb_run.config.dense_width, kernel_initializer='zeros'),
+        tf.keras.layers.Dense(300, kernel_initializer='zeros'),
         tf.keras.layers.Dense(10, kernel_initializer='zeros'),
         tf.keras.layers.Softmax(),
     ])
@@ -92,28 +76,20 @@ def model_fn():
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
 
-## Example MNIST digits for one client
-figure = plt.figure(figsize=(20, 4))
-j = 0
-
-for example in example_dataset.take(40):
-    plt.subplot(4, 10, j+1)
-    plt.imshow(example['pixels'].numpy(), cmap='gray', aspect='equal')
-    plt.axis('off')
-    j += 1
-
 iterative_process = tff.learning.build_federated_averaging_process(
     model_fn,
     client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.02),
     server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0))
 
 federated_eval = tff.learning.build_federated_evaluation(model_fn)  # https://stackoverflow.com/a/56811627/10372825
-eval_dataset = make_federated_data(test_data, test_data.client_ids[:50])
+eval_dataset, _ = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
+                                      test_data, test_data.client_ids[:50], experiment='default')
 
 state = iterative_process.initialize()
 
 seen_ids = set()
 print(f"total clients: {len(train_data.client_ids)} train, {len(test_data.client_ids)} test")
+
 
 for round_num in trange(0, NUM_MEGAPOCHS):
     try:
@@ -121,7 +97,8 @@ for round_num in trange(0, NUM_MEGAPOCHS):
         sampled_clients = np.random.choice(train_data.client_ids, NUM_CLIENTS)
         for client in sampled_clients:
             seen_ids.add(client)
-        dataset = make_federated_data(train_data, sampled_clients)
+        dataset, affected_clients = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
+                                                        train_data, sampled_clients, experiment=EXPERIMENT, CLIENT_RATIO)
         state, metrics = iterative_process.next(state, dataset)
         gc.collect()
         eval_metrics = federated_eval(state.model, eval_dataset)
