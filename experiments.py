@@ -44,6 +44,14 @@ def set_label(val, ds):
         return assign(ex, { 'label': val })
     return ds.map(lam)
 
+def swap_label(a, b, ds):
+    def lam(ex):
+        if ex['label'] == a:
+            return assign(ex, { 'label': b })
+        if ex['label'] == b:
+            return assign(ex, { 'label': a })
+    return ds.map(lam)
+
 experiments = {
     'default':          lambda ds: ds,
     'gaussian_1_3':     partial(gausian_blur, 1., 1),
@@ -53,11 +61,12 @@ experiments = {
     'mask_left_third':  partial(mask, 0, 0, 1, 0.33),
     'mask_top_third':   partial(mask, 0, 0, 0.33, 1),
     'mask_right_half':  partial(mask, 0, 0.5, 1, 1),
-    'mask_bottom_half': partial(mask, 0.5, 0, 1, 1),
+    'mask_bot_half': partial(mask, 0.5, 0, 1, 1),
     'mask_left_half':   partial(mask, 0, 0, 1, 0.5),
     'mask_top_half':    partial(mask, 0, 0, 0.5, 1),
     'shift_label_up':   partial(shift_label, 1, 10),
-    'zero_labels':      partial(set_label, 0)
+    'zero_labels':      partial(set_label, 0),
+    'swap_three_seven': partial(swap_label, 3, 7),
 }
 
 def preprocess(num_epochs, shuffle_buffer, batch_size, prefetch_buffer, dataset):

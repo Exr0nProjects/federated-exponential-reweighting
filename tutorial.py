@@ -16,12 +16,10 @@ from experiments import preprocess, make_federated_data
 import nest_asyncio
 nest_asyncio.apply()
 
-np.random.seed(0)
 wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
 print('running', wandb_run.name)
+np.random.seed(wandb_run.config.seed or 0)
 
-EXPERIMENT = 'default'
-CLIENT_RATIO = 0.1  # ratio of clients affected by noise
 
 # NUM_MEGAPOCHS = wandb_run.config.central_epochs
 # NUM_CLIENTS =   wandb_run.config.central_batch
@@ -31,6 +29,9 @@ CLIENT_RATIO = 0.1  # ratio of clients affected by noise
 # BATCH_SIZE =    wandb_run.config.client_batch
 # CLIENT_LR =     wandb_run.config.client_lr
 
+EXPERIMENT =    wandb_run.config.experiment
+CLIENT_RATIO =  wandb_run.config.client_ratio
+
 NUM_CLIENTS = 50         # number of clients to sample on each round
 NUM_EPOCHS = 100         # number of times to train for each selected client subset
 NUM_MEGAPOCHS = 200      # number of times to reselect clients
@@ -38,6 +39,9 @@ BATCH_SIZE = 32
 
 CLIENT_LR = 0.001
 CENTRAL_LR = 0.005
+
+# EXPERIMENT = 'default'
+# CLIENT_RATIO = 0.1  # ratio of clients affected by noise
 
 PREFETCH_BUFFER = BATCH_SIZE
 SHUFFLE_BUFFER = 100
@@ -103,6 +107,11 @@ for round_num in trange(0, NUM_MEGAPOCHS):
         gc.collect()
         eval_metrics = federated_eval(state.model, eval_dataset)
         # print('round {:2d}, metrics={}, evalmetrics={}'.format(round_num+1, metrics['train'], eval_metrics))
+        if round_num % 10 == 0:
+            for img in list(ds[0].take(1))[0]['x']:
+                wandb.log({f'{EXPERIMENT}/train_images': wandb.Image(img)}, commit=False)
+            for img in list(eval_dataset[0].take(1))[0]['x']:
+                wandb.log({f'{EXPERIMENT}/test_images': wandb.Image(img)}, commit=False)
         wandb.log({
             **metrics['train'],
             'step': round_num * NUM_EPOCHS,
