@@ -1,0 +1,39 @@
+program: tutorial.py
+project: emnist-vanilla
+entity: federated-reweighting
+method: grid
+
+parameters: 
+  experiment:
+    values:
+    - "default"
+    - "gaussian_1_3"
+    - "gaussian_1_5"
+    - "mask_right_third"
+    - "mask_bot_third"
+    - "mask_left_third"
+    - "mask_top_third"
+    - "mask_right_half"
+    - "mask_bottom_half"
+    - "mask_left_half"
+    - "mask_top_half"
+    - "shift_label_up"
+    - "zero_labels"
+  client_ratio:
+    values:
+    - 0.01
+    - 0.05
+    - 0.1
+    - 0.3
+    - 0.5
+    - 0.7
+  seed:
+    values:
+    - 10
+    - 20
+    - 30
+    - 40
+    - 50
+metric:
+  goal: minimize
+  name: test_loss

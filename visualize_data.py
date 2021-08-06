@@ -4,7 +4,8 @@ import numpy as np
 
 from experiments import make_federated_data
 
-EXPERIMENT = 'gaussian_1_5'
+# EXPERIMENT = 'gaussian_1_5'
+EXPERIMENT = 'shift_label_up'
 # EXPERIMENT = 'default'
 CLIENT_RATIO = 0.1
 

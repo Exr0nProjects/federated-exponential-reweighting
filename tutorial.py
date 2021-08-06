@@ -23,25 +23,26 @@ print('running', wandb_run.name)
 EXPERIMENT = 'default'
 CLIENT_RATIO = 0.1  # ratio of clients affected by noise
 
-NUM_MEGAPOCHS = wandb_run.config.central_epochs
-NUM_CLIENTS =   wandb_run.config.central_batch
-CENTRAL_LR =    wandb_run.config.central_lr
-
-NUM_EPOCHS =    wandb_run.config.client_epochs
-BATCH_SIZE =    wandb_run.config.client_batch
-CLIENT_LR =     wandb_run.config.client_lr
-PREFETCH_BUFFER = BATCH_SIZE
-
-# NUM_CLIENTS = 50         # number of clients to sample on each round
-# NUM_EPOCHS = 100         # number of times to train for each selected client subset
-# NUM_MEGAPOCHS = 20000    # number of times to reselect clients
-# BATCH_SIZE = 32
-# PREFETCH_BUFFER = 10
+# NUM_MEGAPOCHS = wandb_run.config.central_epochs
+# NUM_CLIENTS =   wandb_run.config.central_batch
+# CENTRAL_LR =    wandb_run.config.central_lr
 #
-# CLIENT_LR = 0.001
-# CENTRAL_LR = 0.003
+# NUM_EPOCHS =    wandb_run.config.client_epochs
+# BATCH_SIZE =    wandb_run.config.client_batch
+# CLIENT_LR =     wandb_run.config.client_lr
 
+NUM_CLIENTS = 50         # number of clients to sample on each round
+NUM_EPOCHS = 100         # number of times to train for each selected client subset
+NUM_MEGAPOCHS = 200      # number of times to reselect clients
+BATCH_SIZE = 32
+
+CLIENT_LR = 0.001
+CENTRAL_LR = 0.005
+
+PREFETCH_BUFFER = BATCH_SIZE
 SHUFFLE_BUFFER = 100
+
+NUM_TEST_CLIENTS = 50
 
 IMG_WIDTH = 28
 IMG_HEIGHT = 28
@@ -53,7 +54,6 @@ test_data = emnist_test
 
 example_dataset = train_data.create_tf_dataset_for_client(train_data.client_ids[0])
 
-
 preprocessed_example_dataset = preprocess(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER, example_dataset)
 
 def create_keras_model():
@@ -62,7 +62,7 @@ def create_keras_model():
         tf.keras.layers.Conv2D(16, (7,)*2, input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
         # tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(300, kernel_initializer='zeros'),
+        # tf.keras.layers.Dense(300, kernel_initializer='zeros'),
         tf.keras.layers.Dense(10, kernel_initializer='zeros'),
         tf.keras.layers.Softmax(),
     ])
@@ -82,14 +82,11 @@ iterative_process = tff.learning.build_federated_averaging_process(
     server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0))
 
 federated_eval = tff.learning.build_federated_evaluation(model_fn)  # https://stackoverflow.com/a/56811627/10372825
-eval_dataset, _ = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
-                                      test_data, test_data.client_ids[:50], experiment='default')
 
 state = iterative_process.initialize()
 
 seen_ids = set()
 print(f"total clients: {len(train_data.client_ids)} train, {len(test_data.client_ids)} test")
-
 
 for round_num in trange(0, NUM_MEGAPOCHS):
     try:
@@ -97,9 +94,12 @@ for round_num in trange(0, NUM_MEGAPOCHS):
         sampled_clients = np.random.choice(train_data.client_ids, NUM_CLIENTS)
         for client in sampled_clients:
             seen_ids.add(client)
-        dataset, affected_clients = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
-                                                        train_data, sampled_clients, experiment=EXPERIMENT, CLIENT_RATIO)
-        state, metrics = iterative_process.next(state, dataset)
+        ds, _, affected_clients = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
+                                                      train_data, sampled_clients, EXPERIMENT, CLIENT_RATIO)
+        sampled_eval_clients = np.random.choice(test_data.client_ids, NUM_TEST_CLIENTS)
+        eval_dataset, _, _ = make_federated_data(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE, PREFETCH_BUFFER,
+                                                 test_data, sampled_eval_clients, 'default', 0)
+        state, metrics = iterative_process.next(state, ds)
         gc.collect()
         eval_metrics = federated_eval(state.model, eval_dataset)
         # print('round {:2d}, metrics={}, evalmetrics={}'.format(round_num+1, metrics['train'], eval_metrics))

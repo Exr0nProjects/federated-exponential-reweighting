@@ -11,10 +11,10 @@ parameters:
     max: 100
   central_lr:
     min: 0.001
-    max: 10.0
+    max: 5.0
   client_epochs:
     min: 1
-    max: 500
+    max: 200
   client_batch:
     min: 1
     max: 32
