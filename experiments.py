@@ -50,6 +50,8 @@ def swap_label(a, b, ds):
             return assign(ex, { 'label': b })
         if ex['label'] == b:
             return assign(ex, { 'label': a })
+        else:
+            return ex
     return ds.map(lam)
 
 experiments = {
@@ -61,7 +63,7 @@ experiments = {
     'mask_left_third':  partial(mask, 0, 0, 1, 0.33),
     'mask_top_third':   partial(mask, 0, 0, 0.33, 1),
     'mask_right_half':  partial(mask, 0, 0.5, 1, 1),
-    'mask_bot_half': partial(mask, 0.5, 0, 1, 1),
+    'mask_bot_half':    partial(mask, 0.5, 0, 1, 1),
     'mask_left_half':   partial(mask, 0, 0, 1, 0.5),
     'mask_top_half':    partial(mask, 0, 0, 0.5, 1),
     'shift_label_up':   partial(shift_label, 1, 10),

@@ -18,7 +18,7 @@ nest_asyncio.apply()
 
 wandb_run = wandb.init(entity='federated-reweighting', project='emnist-vanilla')
 print('running', wandb_run.name)
-np.random.seed(wandb_run.config.seed or 0)
+np.random.seed(0)
 
 
 # NUM_MEGAPOCHS = wandb_run.config.central_epochs
@@ -29,8 +29,8 @@ np.random.seed(wandb_run.config.seed or 0)
 # BATCH_SIZE =    wandb_run.config.client_batch
 # CLIENT_LR =     wandb_run.config.client_lr
 
-EXPERIMENT =    wandb_run.config.experiment
-CLIENT_RATIO =  wandb_run.config.client_ratio
+# EXPERIMENT =    wandb_run.config.experiment
+# CLIENT_RATIO =  wandb_run.config.client_ratio
 
 NUM_CLIENTS = 50         # number of clients to sample on each round
 NUM_EPOCHS = 100         # number of times to train for each selected client subset
@@ -40,8 +40,8 @@ BATCH_SIZE = 32
 CLIENT_LR = 0.001
 CENTRAL_LR = 0.005
 
-# EXPERIMENT = 'default'
-# CLIENT_RATIO = 0.1  # ratio of clients affected by noise
+EXPERIMENT = 'swap_three_seven'
+CLIENT_RATIO = 0.9  # ratio of clients affected by noise
 
 PREFETCH_BUFFER = BATCH_SIZE
 SHUFFLE_BUFFER = 100
@@ -62,11 +62,8 @@ preprocessed_example_dataset = preprocess(NUM_EPOCHS, SHUFFLE_BUFFER, BATCH_SIZE
 
 def create_keras_model():
     return tf.keras.models.Sequential([
-        # tf.keras.layers.InputLayer(input_shape=(784,)),
         tf.keras.layers.Conv2D(16, (7,)*2, input_shape=(IMG_WIDTH, IMG_HEIGHT, 1), activation='relu'),
-        # tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.Flatten(),
-        # tf.keras.layers.Dense(300, kernel_initializer='zeros'),
         tf.keras.layers.Dense(10, kernel_initializer='zeros'),
         tf.keras.layers.Softmax(),
     ])
