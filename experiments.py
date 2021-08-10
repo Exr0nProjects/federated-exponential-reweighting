@@ -57,7 +57,7 @@ def swap_label(a, b, ds):
 experiments = {
     'default':          lambda ds: ds,
     'gaussian_1_3':     partial(gausian_blur, 1., 1),
-    'gaussian_1_5':     partial(gausian_blur, 1., 4),
+    'gaussian_1_5':     partial(gausian_blur, 1., 3),
     'mask_right_third': partial(mask, 0, 0.67, 1, 1),
     'mask_bot_third':   partial(mask, 0.67, 0, 1, 1),
     'mask_left_third':  partial(mask, 0, 0, 1, 0.33),
